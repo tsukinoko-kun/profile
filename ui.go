@@ -137,9 +137,22 @@ func (m model) View() string {
 	// Start from the end and work backwards to show newest messages
 	for i := len(m.messages) - 1; i >= 0; i-- {
 		msg := m.messages[i]
-		// Estimate message height (rough calculation)
+		// Calculate actual rendered height considering soft wraps
+		messageWidth := m.width/2 - 4
+		if messageWidth < 10 {
+			messageWidth = 10 // minimum width
+		}
+
 		lines := strings.Split(msg.Content, "\n")
-		msgHeight := len(lines) + 1 // +1 for margin
+		totalLines := 0
+		for _, line := range lines {
+			if len(line) == 0 {
+				totalLines++
+			} else {
+				totalLines += (len(line) + messageWidth - 1) / messageWidth // ceiling division
+			}
+		}
+		msgHeight := totalLines + 1 // +1 for margin
 
 		if totalMessageHeight+msgHeight > availableHeight {
 			break
