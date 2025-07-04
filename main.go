@@ -12,7 +12,11 @@ var teaProgram *tea.Program
 var RedoTakenTests = false
 
 func main() {
-	teaProgram = tea.NewProgram(initialModel(), tea.WithAltScreen())
+	teaProgram = tea.NewProgram(
+		initialModel(),
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
+	)
 	go func() {
 		time.Sleep(time.Millisecond * 50)
 		Begin()
