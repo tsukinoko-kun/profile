@@ -5,7 +5,9 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -22,10 +24,12 @@ type Message struct {
 }
 
 type model struct {
-	messages []Message
-	textarea textarea.Model
-	width    int
-	height   int
+	messages         []Message
+	textarea         textarea.Model
+	viewport         viewport.Model
+	width            int
+	height           int
+	markdownRenderer *glamour.TermRenderer
 }
 
 func initialModel() model {
@@ -39,11 +43,20 @@ func initialModel() model {
 	ta.SetWidth(80)
 	ta.SetHeight(5)
 
+	vp := viewport.New(80, 15)
+
+	renderer, _ := glamour.NewTermRenderer(
+		glamour.WithStylePath("dark"),
+		glamour.WithWordWrap(40),
+	)
+
 	return model{
-		messages: []Message{},
-		textarea: ta,
-		width:    80,
-		height:   24,
+		messages:         []Message{},
+		textarea:         ta,
+		viewport:         vp,
+		width:            80,
+		height:           24,
+		markdownRenderer: renderer,
 	}
 }
 
@@ -60,6 +73,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.textarea.SetWidth(msg.Width - 4)
 
+		// Update viewport size
+		inputHeight := m.textarea.Height() + 4 // +4 for borders and help
+		m.viewport.Width = msg.Width
+		m.viewport.Height = msg.Height - inputHeight
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
@@ -68,7 +86,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+y":
 			trimmedMessage := strings.TrimSpace(m.textarea.Value())
 			if trimmedMessage != "" {
-				// Clear input
 				m.textarea.Reset()
 
 				// Add user message
@@ -77,6 +94,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					IsUser:  true,
 				}
 				m.messages = append(m.messages, userMsg)
+				m.updateViewport()
 
 				go Continue(trimmedMessage)
 			}
@@ -86,12 +104,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case NewCategoryMessage:
 		m.textarea.Reset()
 		m.messages = nil
+		m.updateViewport()
 
 	case AiMessage:
 		m.messages = append(m.messages, Message{
 			Content: msg.Content,
 			IsUser:  false,
 		})
+		m.updateViewport()
 
 	case AiThinkingMessage:
 		if msg.Thinking {
@@ -102,15 +122,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Update textarea
+	// Update textarea and viewport
 	var cmd tea.Cmd
-	m.textarea, cmd = m.textarea.Update(msg)
-	cmds = append(cmds, cmd)
+	if m.textarea.Focused() {
+		m.textarea, cmd = m.textarea.Update(msg)
+		cmds = append(cmds, cmd)
+	} else {
+		m.viewport, cmd = m.viewport.Update(msg)
+		cmds = append(cmds, cmd)
+	}
 
 	return m, tea.Batch(cmds...)
 }
 
-func (m model) View() string {
+func (m *model) updateViewport() {
+	// Update renderer width
+	m.markdownRenderer, _ = glamour.NewTermRenderer(
+		glamour.WithStylePath("dark"),
+		glamour.WithWordWrap(m.width/2-8),
+	)
+
 	// Styles
 	userStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -118,7 +149,7 @@ func (m model) View() string {
 		Padding(0, 1).
 		MarginRight(1).
 		MarginBottom(1).
-		Align(lipgloss.Right)
+		Align(lipgloss.Left)
 
 	llmStyle := lipgloss.NewStyle().
 		Padding(0, 1).
@@ -126,69 +157,39 @@ func (m model) View() string {
 		MarginBottom(1).
 		Align(lipgloss.Left)
 
-	// Calculate available height for messages
-	inputHeight := m.textarea.Height() + 2        // +2 for borders
-	availableHeight := m.height - inputHeight - 4 // -4 for padding/margins
-
-	// Render messages
+	// Render all messages
 	var messageViews []string
 
-	// Calculate how many messages we can show
-	totalMessageHeight := 0
-	visibleMessages := []Message{}
+	for _, msg := range m.messages {
+		var content string
 
-	// Start from the end and work backwards to show newest messages
-	for i := len(m.messages) - 1; i >= 0; i-- {
-		msg := m.messages[i]
-		// Calculate actual rendered height considering soft wraps
-		messageWidth := m.width/2 - 4
-		if messageWidth < 10 {
-			messageWidth = 10 // minimum width
-		}
-
-		lines := strings.Split(msg.Content, "\n")
-		totalLines := 0
-		for _, line := range lines {
-			if len(line) == 0 {
-				totalLines++
-			} else {
-				totalLines += (len(line) + messageWidth - 1) / messageWidth // ceiling division
-			}
-		}
-		msgHeight := totalLines + 1 // +1 for margin
-
-		if totalMessageHeight+msgHeight > availableHeight {
-			break
-		}
-
-		totalMessageHeight += msgHeight
-		visibleMessages = append([]Message{msg}, visibleMessages...)
-	}
-
-	// Render visible messages
-	for _, msg := range visibleMessages {
 		if msg.IsUser {
-			// Right-aligned user message
-			content := userStyle.Width(m.width/2 - 4).Render(msg.Content)
+			rendered, err := m.markdownRenderer.Render(msg.Content)
+			if err != nil {
+				rendered = msg.Content
+			}
+			content = userStyle.Width(m.width/2 - 4).Render(strings.TrimSpace(rendered))
 			messageViews = append(messageViews,
 				lipgloss.NewStyle().Width(m.width).Align(lipgloss.Right).Render(content))
 		} else {
-			// Left-aligned LLM message
-			content := llmStyle.Width(m.width/2 - 4).Render(msg.Content)
+			rendered, err := m.markdownRenderer.Render(msg.Content)
+			if err != nil {
+				rendered = msg.Content
+			}
+			content = llmStyle.Width(m.width/2 - 4).Render(strings.TrimSpace(rendered))
 			messageViews = append(messageViews,
 				lipgloss.NewStyle().Width(m.width).Align(lipgloss.Left).Render(content))
 		}
 	}
 
-	// Join messages
-	messagesView := strings.Join(messageViews, "\n")
+	// Set viewport content
+	m.viewport.SetContent(strings.Join(messageViews, "\n"))
 
-	// Add padding to push messages up and input down
-	remainingHeight := availableHeight - totalMessageHeight
-	if remainingHeight > 0 {
-		messagesView += strings.Repeat("\n", remainingHeight)
-	}
+	// Auto-scroll to bottom
+	m.viewport.GotoBottom()
+}
 
+func (m model) View() string {
 	// Input area
 	inputStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -202,8 +203,8 @@ func (m model) View() string {
 		Foreground(lipgloss.Color("8")).
 		MarginTop(1)
 
-	helpView := helpStyle.Render("Enter: new line • Ctrl+Y: send • Ctrl+C: quit")
+	helpView := helpStyle.Render("Enter: new line • Ctrl+Y: send • Ctrl+C: quit • ↑/↓: scroll")
 
 	// Combine all parts
-	return fmt.Sprintf("%s\n%s\n%s", messagesView, inputView, helpView)
+	return fmt.Sprintf("%s\n%s\n%s", m.viewport.View(), inputView, helpView)
 }
