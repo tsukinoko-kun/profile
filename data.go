@@ -156,6 +156,27 @@ var Categories = []MainCategory{
 		},
 	},
 	{
+		Name: "Data formats",
+		SubCategories: []SubCategory{
+			{
+				Name:        "JSON",
+				Description: "JavaScript Object Notation, Schema, Progressive JSON, JSON5, JSONC, etc.",
+			},
+			{
+				Name:        "YAML",
+				Description: "Anchors, aliases, etc.",
+			},
+			{
+				Name:        "CSV",
+				Description: "Separator, quoting, escaping, etc.",
+			},
+			{
+				Name:        "Binary",
+				Description: "Protocol buffers, ect.",
+			},
+		},
+	},
+	{
 		Name: "Tools",
 		SubCategories: []SubCategory{
 			{
