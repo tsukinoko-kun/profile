@@ -50,9 +50,19 @@ func init() {
 }
 
 var (
-	prompt = `You talk to a software developer about various specialist areas to find out their level in these specialist areas. Ask specific questions on the respective topic to determine the developer's experience. Don't talk about things that are opinions and where there is no objective right and wrong, these are irrelevant.
+	prompt = `You talk to a software developer about various specialist areas to find out their level in these specialist areas. Ask specific questions on the respective topic to determine the developer's experience. Don't elaborate on things that are opinions and where there is no objective right and wrong, these are irrelevant.
+
 The current topic is: %s
-If you were able to form an opinion about the developer, give a rating from 0 to 100. As long as you are still unsure, keep asking questions. Do not ask any more questions once you have a rating.`
+
+If you were able to form an opinion about the developer, give a rating from 0 to 100. As long as you are still unsure, keep asking questions. Do not ask any more questions once you have a rating.
+
+Give a rating of 100 if you think the developer is excellent at the topic and comparable to a legend in the field like Dan Abramov for React, Ken Thompson for compilers, or John Carmack for Game Engines. The 100 is for the best of the best but keep in mind that not even Dan Abramov knows every single bit about React, but he understands how the really deep parts work. Don't hesitate to give the 100 if the developer really seems to know what he is talking about.
+
+Give a rating of 50 if the developer is at the expected level of a mid-range developer in that field. The 50 score is for the most average developer in the field (average for a developer that works in that field, not average over any developer).
+
+Give a rating of 10 if the developer is at the expected level of a junior (right out of college) in that field.
+
+Give a rating of 1 if the developer has no idea what they are talking about.`
 	config = &genai.GenerateContentConfig{
 		ResponseMIMEType: "application/json",
 		ResponseSchema: &genai.Schema{
@@ -73,11 +83,15 @@ If you were able to form an opinion about the developer, give a rating from 0 to
 						"rating": {
 							Type:     genai.TypeInteger,
 							Nullable: genai.Ptr(false),
-							Minimum:  genai.Ptr(0.0),
+							Minimum:  genai.Ptr(1.0),
 							Maximum:  genai.Ptr(100.0),
 						},
+						"comment": {
+							Type:     genai.TypeString,
+							Nullable: genai.Ptr(false),
+						},
 					},
-					Required: []string{"rating"},
+					Required: []string{"rating", "comment"},
 				},
 			},
 		},
@@ -87,15 +101,22 @@ If you were able to form an opinion about the developer, give a rating from 0 to
 type AiResponse struct {
 	Message *string `json:"message"`
 	Rating  *int    `json:"rating"`
+	Comment *string `json:"comment"`
 }
 
 func Begin() {
+	if GetCurrentCategoryScore() > 0 && !RedoTakenTests {
+		ApplyRating(GetCurrentCategoryScore())
+		return
+	}
 	aiMessageHistory = nil
 	teaProgram.Send(NewCategoryMessage{})
 	teaProgram.Send(AiThinkingMessage{Thinking: true})
 	ctx := context.Background()
 
-	config.SystemInstruction = genai.NewContentFromText(fmt.Sprintf(prompt, GetCurrentCategory()), "model")
+	config.SystemInstruction = &genai.Content{
+		Parts: []*genai.Part{{Text: fmt.Sprintf(prompt, GetCurrentCategory())}},
+	}
 
 	resp, err := llmClient.Models.GenerateContent(
 		ctx,
@@ -121,6 +142,10 @@ func Begin() {
 		teaProgram.Send(AiMessage{Content: *aiResp.Message})
 	}
 
+	if aiResp.Comment != nil {
+		ApplyComment(*aiResp.Comment)
+	}
+
 	if aiResp.Rating != nil {
 		ApplyRating(*aiResp.Rating)
 	}
@@ -130,17 +155,26 @@ func Continue(userInput string) {
 	ctx := context.Background()
 	teaProgram.Send(AiThinkingMessage{Thinking: true})
 
-	config.SystemInstruction = genai.NewContentFromText(fmt.Sprintf(prompt, GetCurrentCategory()), "model")
+	config.SystemInstruction = &genai.Content{
+		Parts: []*genai.Part{{Text: fmt.Sprintf(prompt, GetCurrentCategory())}},
+	}
 
-	history := make([]*genai.Content, 0, len(aiMessageHistory)+1)
+	aiMessageHistory = append(aiMessageHistory, AiMessageHistoryEntry{
+		Content: userInput,
+		IsUser:  true,
+	})
+	history := make([]*genai.Content, 0, len(aiMessageHistory))
 	for _, entry := range aiMessageHistory {
+		if entry.Content == "" {
+			Err(fmt.Errorf("empty content at index %d", len(aiMessageHistory)-1))
+			return
+		}
 		if entry.IsUser {
 			history = append(history, genai.NewContentFromText(entry.Content, "user"))
 		} else {
 			history = append(history, genai.NewContentFromText(entry.Content, "model"))
 		}
 	}
-	history = append(history, genai.NewContentFromText(userInput, "user"))
 
 	resp, err := llmClient.Models.GenerateContent(
 		ctx,
@@ -166,9 +200,11 @@ func Continue(userInput string) {
 		teaProgram.Send(AiMessage{Content: *aiResp.Message})
 	}
 
+	if aiResp.Comment != nil {
+		ApplyComment(*aiResp.Comment)
+	}
+
 	if aiResp.Rating != nil {
 		ApplyRating(*aiResp.Rating)
 	}
-
-	return
 }

@@ -66,23 +66,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "ctrl+y":
-			if strings.TrimSpace(m.textarea.Value()) != "" {
+			trimmedMessage := strings.TrimSpace(m.textarea.Value())
+			if trimmedMessage != "" {
+				// Clear input
+				m.textarea.Reset()
+
 				// Add user message
 				userMsg := Message{
-					Content: strings.TrimSpace(m.textarea.Value()),
+					Content: trimmedMessage,
 					IsUser:  true,
 				}
 				m.messages = append(m.messages, userMsg)
 
-				Continue(strings.TrimSpace(m.textarea.Value()))
-
-				// Clear input
-				m.textarea.Reset()
+				go Continue(trimmedMessage)
 			}
 			return m, nil
 		}
 
 	case NewCategoryMessage:
+		m.textarea.Reset()
 		m.messages = nil
 
 	case AiMessage:
@@ -93,6 +95,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case AiThinkingMessage:
 		if msg.Thinking {
+			m.textarea.Reset()
 			m.textarea.Blur()
 		} else {
 			m.textarea.Focus()

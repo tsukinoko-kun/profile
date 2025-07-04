@@ -1,29 +1,34 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 )
 
 type (
 	MainCategory struct {
-		Name          string
-		SubCategories []SubCategory
+		Name          string        `json:"name"`
+		SubCategories []SubCategory `json:"sub_categories"`
 	}
 
 	SubCategory struct {
-		Name        string
-		Description string
-		Score       int // 1 to 100
+		Name        string `json:"name"`
+		Description string `json:"-"`
+		Score       int    `json:"score"` // 1 to 100
+		Comment     string `json:"comment"`
 	}
 )
 
+// Score returns the score of the main category which is the average of the scores of its sub categories.
 func (mc MainCategory) Score() int {
 	var score int
 	for _, sc := range mc.SubCategories {
 		score += sc.Score
 	}
-	return int(math.Round(float64(score) / float64(len(mc.SubCategories)) * 100.0))
+	return int(math.Round(float64(score) / float64(len(mc.SubCategories))))
 }
 
 var (
@@ -49,25 +54,37 @@ func GetCurrentCategory() string {
 	)
 }
 
+func GetCurrentCategoryScore() int {
+	return Categories[mainCategoryIndex].SubCategories[subCategoryIndex].Score
+}
+
+func ApplyComment(comment string) {
+	Categories[mainCategoryIndex].SubCategories[subCategoryIndex].Comment = comment
+}
+
 func ApplyRating(score int) {
 	score = clamp(0, score, 100)
 	Categories[mainCategoryIndex].SubCategories[subCategoryIndex].Score = score
-	subCategoryIndex++
-	if subCategoryIndex >= len(Categories[mainCategoryIndex].SubCategories) {
-		subCategoryIndex = 0
-		mainCategoryIndex++
-	}
-	if mainCategoryIndex >= len(Categories) {
-		mainCategoryIndex = 0
-		subCategoryIndex = 0
-		// no more categories, end the program
-		teaProgram.Quit()
-		return
+	go SaveScores()
+	for {
+		subCategoryIndex++
+		if subCategoryIndex >= len(Categories[mainCategoryIndex].SubCategories) {
+			subCategoryIndex = 0
+			mainCategoryIndex++
+		}
+		if mainCategoryIndex >= len(Categories) {
+			mainCategoryIndex = 0
+			subCategoryIndex = 0
+			// no more categories, end the program
+			teaProgram.Quit()
+			return
+		}
+		if RedoTakenTests || GetCurrentCategoryScore() <= 0 {
+			break
+		}
 	}
 
-	// initialize chat for the new category
-	aiMessageHistory = nil
-	Begin()
+	go Begin()
 }
 
 var Categories = []MainCategory{
@@ -355,4 +372,61 @@ var Categories = []MainCategory{
 			},
 		},
 	},
+}
+
+func LoadSaveScores() {
+	name := getDataStoreLocation()
+	if _, err := os.Stat(name); err == nil {
+		data, err := os.ReadFile(name)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error reading file: %v\n", err)
+			os.Exit(1)
+		}
+		var storedCats []MainCategory
+		err = json.Unmarshal(data, &storedCats)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error unmarshalling file: %v\n", err)
+			os.Exit(1)
+		}
+
+		// apply saved scores without overwriting the sub categories
+		for _, storedCat := range storedCats {
+			if storedCat.Score() == 0 {
+				continue
+			}
+			// find the same category in the current list
+			for i, cat := range Categories {
+				if cat.Name == storedCat.Name {
+					for _, storedSubCat := range storedCat.SubCategories {
+						if storedSubCat.Score == 0 {
+							continue
+						}
+						// find the same sub category in the current list
+						for j, subCat := range cat.SubCategories {
+							if subCat.Name == storedSubCat.Name {
+								Categories[i].SubCategories[j].Score = storedSubCat.Score
+								break
+							}
+						}
+					}
+					break
+				}
+			}
+		}
+	}
+}
+
+func SaveScores() {
+	name := getDataStoreLocation()
+	_ = os.MkdirAll(filepath.Dir(name), 0755)
+	jsonData, err := json.MarshalIndent(Categories, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error marshalling file: %v\n", err)
+		os.Exit(1)
+	}
+	err = os.WriteFile(name, jsonData, 0644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error writing file: %v\n", err)
+		os.Exit(1)
+	}
 }

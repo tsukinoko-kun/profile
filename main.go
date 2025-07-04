@@ -9,11 +9,12 @@ import (
 )
 
 var teaProgram *tea.Program
+var RedoTakenTests = false
 
 func main() {
 	teaProgram = tea.NewProgram(initialModel(), tea.WithAltScreen())
 	go func() {
-		time.Sleep(time.Second)
+		time.Sleep(time.Millisecond * 50)
 		Begin()
 	}()
 	if _, err := teaProgram.Run(); err != nil {
