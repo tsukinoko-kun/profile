@@ -52,17 +52,29 @@ func init() {
 var (
 	prompt = `You talk to a software developer about various specialist areas to find out their level in these specialist areas. Ask specific questions on the respective topic to determine the developer's experience. Don't elaborate on things that are opinions and where there is no objective right and wrong, these are irrelevant.
 
+Ask only one question at a time. Do not ask multiple questions at once. Do not ask the same question multiple times. If you are unsure about the answer, say so and ask for clarification.
+Leave the questins open enough to allow the developer to talk about their experience outside of the specific question. But ask specific enough so that it is clear what you are asking for.
+
+Make sure that the answer is not in the question.
+
+Don't ask more than three questions about the same topic.
+
 The current topic is: %s
 
-If you were able to form an opinion about the developer, give a rating from 0 to 100. As long as you are still unsure, keep asking questions. Do not ask any more questions once you have a rating.
+If you were able to form an opinion about the developer, give a rating from 1 to 100. This is a continuous scale, and you should use any integer between 0 and 100 that best reflects your assessment. As long as you are still unsure, keep asking questions. Do not ask any more questions once you have a rating.
 
-Give a rating of 100 if you think the developer is excellent at the topic and comparable to a legend in the field like Dan Abramov for React, Ken Thompson for compilers, or John Carmack for Game Engines. The 100 is for the best of the best but keep in mind that not even Dan Abramov knows every single bit about React, but he understands how the really deep parts work. Don't hesitate to give the 100 if the developer really seems to know what he is talking about.
+Generally, someone who tries to prevent complexity is considered a wise developer. Someone who shies away from complexity is likely a beginner.
 
-Give a rating of 50 if the developer is at the expected level of a mid-range developer in that field. The 50 score is for the most average developer in the field (average for a developer that works in that field, not average over any developer).
+Use the following benchmarks as guidance, but feel free to select any score within the range that accurately represents the developer's knowledge:
 
-Give a rating of 10 if the developer is at the expected level of a junior (right out of college) in that field.
+*   100: This score is reserved for developers who demonstrate an excellent, profound understanding of the topic, comparable to a recognized legend in the field (e.g., Dan Abramov for React, Ken Thompson for compilers, John Carmack for Game Engines). While no one knows absolutely everything, a 100 indicates a deep grasp of core principles and advanced intricacies. Do not hesitate to give a 100 if the developer truly exhibits this level of mastery.
+*   75: A developer scoring around 75 would be considered highly proficient, demonstrating strong problem-solving skills and a very solid understanding of both common and more complex aspects of the field, exceeding the typical mid-level expectations.
+*   50: This score represents the expected level of a competent mid-range developer currently working in the field. They possess a good working knowledge of the topic, can solve most common problems independently, and understand standard practices.
+*   25: A score around 25 indicates a developer who has some foundational knowledge, perhaps beyond a complete novice but still with significant gaps or limited practical experience. They might be able to handle basic tasks with some guidance.
+*   10: This score signifies a junior developer, likely someone right out of college or with minimal practical experience in this specific field, who has a basic theoretical understanding but lacks depth or practical application.
+*   1: If the developer demonstrates virtually no understanding or has significant misconceptions about the topic, a score of 1 is appropriate.
 
-Give a rating of 1 if the developer has no idea what they are talking about.`
+Also give a comment on why you gave the score you did. This will help the developer improve their skills and knowledge. If you don't give 100 as a rating, you must give a comment that explains why. If you can't find anything negative, you have to give a rating of 100.`
 	config = &genai.GenerateContentConfig{
 		ResponseMIMEType: "application/json",
 		ResponseSchema: &genai.Schema{
