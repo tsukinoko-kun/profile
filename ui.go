@@ -183,20 +183,20 @@ func (m *model) updateViewport() {
 	// Update renderer width
 	m.markdownRenderer, _ = glamour.NewTermRenderer(
 		glamour.WithStylePath("dark"),
-		glamour.WithWordWrap(m.width/2-8),
+		glamour.WithWordWrap(m.width/2-10),
 	)
 
 	// Styles
 	userStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("8")).
-		Padding(0, 1).
+		Padding(0).
 		MarginRight(1).
 		MarginBottom(1).
 		Align(lipgloss.Left)
 
 	llmStyle := lipgloss.NewStyle().
-		Padding(0, 1).
+		Padding(0).
 		MarginLeft(1).
 		MarginBottom(1).
 		Align(lipgloss.Left)
