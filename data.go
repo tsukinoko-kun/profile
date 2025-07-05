@@ -92,16 +92,12 @@ var Categories = []MainCategory{
 		Name: "Computer Science",
 		SubCategories: []SubCategory{
 			{
-				Name:        "Algorithms & Data Structures",
+				Name:        "Algorithms and Data Structures",
 				Description: "Algorithms and data structures. Sorting, searching, ect. Trees, graphs, etc. Big-O notation, time complexity, space complexity, etc.",
 			},
 			{
-				Name:        "Discrete Mathematics & Logic",
+				Name:        "Discrete Mathematics and Logic",
 				Description: "Set theory, logic, probability, etc.",
-			},
-			{
-				Name:        "Version control systems",
-				Description: "3-way merge, conflictless merge, snapshot vs diff, etc.",
 			},
 			{
 				Name:        "Compression",
@@ -140,6 +136,10 @@ var Categories = []MainCategory{
 			{
 				Name:        "DOM",
 				Description: "Document Object Model, events, TSX, virtual DOM, canvas, webgl/webgpu, etc.",
+			},
+			{
+				Name:        "Browsers",
+				Description: "Differences between browsers, rendering erninges, JavaScript engines, what are they known for, etc.",
 			},
 			{
 				Name:        "Backend",
@@ -210,7 +210,7 @@ var Categories = []MainCategory{
 			},
 			{
 				Name:        "Version Control",
-				Description: "Git, Mercurial, Subversion, Jujutsu, Perforce, etc.",
+				Description: "Git, Mercurial, Subversion, Jujutsu, Perforce, etc.\nAdvanced topics include 3-way merge, conflictless merge, snapshot vs diff, etc.",
 			},
 			{
 				Name:        "Build Tools",

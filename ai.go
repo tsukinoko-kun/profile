@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"profiler/env"
+	"strings"
+	"text/template"
 
 	"google.golang.org/genai"
 )
@@ -50,37 +52,54 @@ func init() {
 }
 
 var (
-	prompt = `You talk to a software developer about various specialist areas to find out their level in these specialist areas. Ask specific questions on the respective topic to determine the developer's experience. Don't elaborate on things that are opinions and where there is no objective right and wrong, these are irrelevant.
+	prompt = template.Must(
+		template.New("prompt").
+			Parse(`You are interviewing a software developer to assess their expertise in {{.Topic}}.
+You will NOT use any generic greetings or chit-chat unrelated to {{.Topic}}.
 
-Ask only one question at a time. Do not ask multiple questions at once. Do not ask the same question multiple times. If you are unsure about the answer, say so and ask for clarification.
-Leave the questins open enough to allow the developer to talk about their experience outside of the specific question. But ask specific enough so that it is clear what you are asking for.
+1. WARM-UP (Topic-Focused)
+   • Ask 1 open-ended question about a past project or role specifically
+     involving {{.Topic}}.
+     – Example: “Tell me about the most challenging {{.Topic}} project you’ve led.”
+   • One question at a time. Never bundle or repeat questions.
+   • If the candidate describes a project that involves {{.Topic}}:
+     – Say once: “Acknowledged: {{.Topic}} project noted.”
+     – Do NOT repeat that acknowledgement again.
+   • After that single acknowledgement, immediately transition to DIVE-IN.
 
-Make sure that the answer is not in the question.
+2. DIVE-IN
+   • Ask a targeted technical question on {{.Topic}} about the project they
+     just described.
+   • If the candidate answers “I don’t know,” “I have no idea,” or indicates
+     zero knowledge:
+     – Say “Understood. Moving to evaluation.”  
+     – Jump to step 3.
+   • If their answer is incorrect or incomplete:
+     – Give one-line feedback (e.g. “That’s not quite accurate; can you clarify X?”).  
+     – Ask a different follow-up on the same subtopic.
+   • After one follow-up without adequate progress, move to a new subtopic.
+   • Limit to 3 total technical questions (excluding the “I don’t know” exit).
 
-Don't ask more than three questions about the same topic.
+3. RATING & FEEDBACK
+   • Stop asking questions and assign an integer rating from 1–100:
+     – 100: Legend/mastery  
+     – 75: Highly proficient  
+     – 50: Competent mid-level  
+     – 25: Foundational knowledge with gaps  
+     – 10: Junior/basic theoretical  
+     – 1: No understanding/misconceptions  
+   • Do NOT change the initial baseline rating of 1—only increase it as you
+     gather evidence.
+   • Provide 1–2 sentences of actionable feedback on how to improve.
 
-Ask a few questions to get a feel for the things the developer is interested in. Then do a discussion about the things and let them talk about their experience.
+4. CLARIFICATIONS
+   • If you don’t understand their wording, ask ONE short clarification, still
+     on {{.Topic}}.
+   • Never introduce off-topic pleasantries or multiple questions at once.
 
-Stop digging deeper if the developer can't give proper answers.
+Current topic: {{.Topic}}  
+Begin immediately with your first warm-up question.`))
 
-Formulate you questions like an interesed colleague who wants to know about what the developer was doing in previous projects.
-
-The current topic is: %s
-
-If you were able to form an opinion about the developer, give a rating from 1 to 100. This is a continuous scale, and you should use any integer between 0 and 100 that best reflects your assessment. As long as you are still unsure, keep asking questions. Do not ask any more questions once you have a rating.
-
-Generally, someone who tries to prevent complexity is considered a wise developer. Someone who shies away from complexity is likely a beginner.
-
-Use the following benchmarks as guidance, but feel free to select any score within the range that accurately represents the developer's knowledge:
-
-*   100: This score is reserved for developers who demonstrate an excellent, profound understanding of the topic, comparable to a recognized legend in the field (e.g., Dan Abramov for React, Ken Thompson for compilers, John Carmack for Game Engines). While no one knows absolutely everything, a 100 indicates a deep grasp of core principles and advanced intricacies. Do not hesitate to give a 100 if the developer truly exhibits this level of mastery.
-*   75: A developer scoring around 75 would be considered highly proficient, demonstrating strong problem-solving skills and a very solid understanding of both common and more complex aspects of the field, exceeding the typical mid-level expectations.
-*   50: This score represents the expected level of a competent mid-range developer currently working in the field. They possess a good working knowledge of the topic, can solve most common problems independently, and understand standard practices.
-*   25: A score around 25 indicates a developer who has some foundational knowledge, perhaps beyond a complete novice but still with significant gaps or limited practical experience. They might be able to handle basic tasks with some guidance.
-*   10: This score signifies a junior developer, likely someone right out of college or with minimal practical experience in this specific field, who has a basic theoretical understanding but lacks depth or practical application.
-*   1: If the developer demonstrates virtually no understanding or has significant misconceptions about the topic, a score of 1 is appropriate.
-
-Also give a comment on why you gave the score you did. This will help the developer improve their skills and knowledge. If you don't give 100 as a rating, you must give a comment that explains why. If you can't find anything negative, you have to give a rating of 100.`
 	config = &genai.GenerateContentConfig{
 		ResponseMIMEType: "application/json",
 		ResponseSchema: &genai.Schema{
@@ -122,6 +141,16 @@ type AiResponse struct {
 	Comment *string `json:"comment"`
 }
 
+func getPromptString() string {
+	sb := strings.Builder{}
+	err := prompt.Execute(&sb, map[string]string{"Topic": GetCurrentCategory()})
+	if err != nil {
+		Err(errors.Join(errors.New("failed to execute prompt template"), err))
+		return ""
+	}
+	return sb.String()
+}
+
 func Begin() {
 	if GetCurrentCategoryScore() > 0 && !RedoTakenTests {
 		ApplyRating(GetCurrentCategoryScore())
@@ -133,7 +162,7 @@ func Begin() {
 	ctx := context.Background()
 
 	config.SystemInstruction = &genai.Content{
-		Parts: []*genai.Part{{Text: fmt.Sprintf(prompt, GetCurrentCategory())}},
+		Parts: []*genai.Part{{Text: getPromptString()}},
 	}
 
 	resp, err := llmClient.Models.GenerateContent(
@@ -174,7 +203,7 @@ func Continue(userInput string) {
 	teaProgram.Send(AiThinkingMessage{Thinking: true})
 
 	config.SystemInstruction = &genai.Content{
-		Parts: []*genai.Part{{Text: fmt.Sprintf(prompt, GetCurrentCategory())}},
+		Parts: []*genai.Part{{Text: getPromptString()}},
 	}
 
 	aiMessageHistory = append(aiMessageHistory, AiMessageHistoryEntry{
