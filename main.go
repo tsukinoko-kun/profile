@@ -12,6 +12,7 @@ var teaProgram *tea.Program
 var RedoTakenTests = false
 
 func main() {
+	LoadSaveScores()
 	teaProgram = tea.NewProgram(
 		initialModel(),
 		tea.WithAltScreen(),
